@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Model cache
+*.h5
+*.tflite
+
+# Audio test files (optional)
+test_audio/
+
+# OS
+.DS_Store
