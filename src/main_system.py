@@ -245,7 +245,8 @@ from business.logic import decide_and_execute
 # Paths
 # ==========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(os.path.dirname(BASE_DIR), "sound_class_model_mfcc_opt.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "sound_class_model_mfcc_opt.keras")
+
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")

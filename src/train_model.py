@@ -1070,6 +1070,7 @@ print("Training completed!")
 # ❌ 不要再用 .h5
 # model.save("sound_class_model_mfcc_opt.h5")
 
+
 # ✅ 正确方式（Render兼容）
 model.save("sound_class_model_mfcc_opt.keras")
 
