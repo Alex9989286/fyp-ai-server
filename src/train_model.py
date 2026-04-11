@@ -632,6 +632,268 @@
 
 
 
+# import os
+# import numpy as np
+# import pandas as pd
+# import librosa
+# import tensorflow as tf
+# from tensorflow.keras import layers, models
+# from sklearn.model_selection import train_test_split
+# from sklearn.preprocessing import LabelEncoder
+# import random
+
+# print("All libraries imported successfully!")
+
+# # ===============================
+# # 0️⃣ Fix randomness (VERY IMPORTANT)
+# # ===============================
+# SEED = 42
+
+# os.environ["PYTHONHASHSEED"] = str(SEED)
+# random.seed(SEED)
+# np.random.seed(SEED)
+# tf.random.set_seed(SEED)
+
+# # ===============================
+# # 1️⃣ Dataset path
+# # ===============================
+# DATA_PATH = "../data/ESC-50"
+
+# meta = pd.read_csv(os.path.join(DATA_PATH, "meta/esc50.csv"))
+
+# target_classes = [
+#     "car_horn", "dog", "door_wood_knock",
+#     "clock_alarm", "footsteps", "siren"
+# ]
+
+# meta = meta[meta["category"].isin(target_classes)]
+
+# # ===============================
+# # 2️⃣ Feature extraction
+# # ===============================
+# def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, augment=False):
+
+#     y, sr = librosa.load(file_path, sr=sr)
+
+#     if augment:
+#         # Random volume scaling + noise injection
+#         y = y * np.random.uniform(0.9, 1.1)
+#         y = y + 0.002 * np.random.randn(len(y))
+
+#         # Time stretching
+#         rate = np.random.uniform(0.9, 1.1)
+#         y = librosa.effects.time_stretch(y, rate=rate)
+
+#         # Pitch shifting
+#         n_steps = np.random.uniform(-2, 2)
+#         y = librosa.effects.pitch_shift(y=y, sr=sr, n_steps=n_steps)
+
+#     # MFCC + Delta + Delta-Delta features
+#     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+#     delta = librosa.feature.delta(mfcc)
+#     delta2 = librosa.feature.delta(mfcc, order=2)
+
+#     features = np.concatenate([mfcc, delta, delta2], axis=0)
+
+#     # Pad or truncate to fixed length
+#     if features.shape[1] < max_len:
+#         pad = max_len - features.shape[1]
+#         features = np.pad(features, ((0,0),(0,pad)))
+#     else:
+#         features = features[:, :max_len]
+
+#     return features
+
+
+# # ===============================
+# # 3️⃣ Feature extraction for prediction
+# # ===============================
+# def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
+
+#     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+#     delta = librosa.feature.delta(mfcc)
+#     delta2 = librosa.feature.delta(mfcc, order=2)
+
+#     features = np.concatenate([mfcc, delta, delta2], axis=0)
+
+#     # Pad or truncate
+#     if features.shape[1] < max_len:
+#         pad = max_len - features.shape[1]
+#         features = np.pad(features, ((0,0),(0,pad)))
+#     else:
+#         features = features[:, :max_len]
+
+#     return features
+
+
+# # ===============================
+# # 4️⃣ Build training dataset (original + augmented)
+# # ===============================
+# X, y = [], []
+
+# print("Starting audio feature extraction...")
+
+# for _, row in meta.iterrows():
+
+#     file_path = os.path.join(DATA_PATH, "audio", row["filename"])
+
+#     try:
+#         # Original sample
+#         X.append(extract_features(file_path, augment=False))
+#         y.append(row["category"])
+
+#         # Augmented sample
+#         X.append(extract_features(file_path, augment=True))
+#         y.append(row["category"])
+
+#     except:
+#         continue
+
+# print("Audio feature extraction completed!")
+
+# X = np.array(X)[..., np.newaxis]
+
+# le = LabelEncoder()
+# y_encoded = le.fit_transform(y)
+# y_onehot = tf.keras.utils.to_categorical(y_encoded)
+
+# # ===============================
+# # 5️⃣ Train/Test split
+# # ===============================
+# X_train, X_test, y_train, y_test = train_test_split(
+#     X, y_onehot,
+#     test_size=0.2,
+#     random_state=SEED,
+#     stratify=y_encoded
+# )
+
+# # ===============================
+# # 6️⃣ CNN model architecture
+# # ===============================
+# model = models.Sequential([
+
+#     layers.Input(shape=X_train.shape[1:]),
+
+#     layers.Conv2D(32,(3,3),activation='relu',padding='same'),
+#     layers.BatchNormalization(),
+#     layers.MaxPooling2D(2),
+
+#     layers.Conv2D(64,(3,3),activation='relu',padding='same'),
+#     layers.BatchNormalization(),
+#     layers.MaxPooling2D(2),
+
+#     layers.Conv2D(128,(3,3),activation='relu',padding='same'),
+#     layers.BatchNormalization(),
+
+#     layers.GlobalAveragePooling2D(),
+
+#     layers.Dropout(0.4),
+#     layers.Dense(128,activation='relu'),
+#     layers.Dropout(0.4),
+
+#     layers.Dense(y_onehot.shape[1],activation='softmax')
+# ])
+
+# model.compile(
+#     optimizer='adam',
+#     loss='categorical_crossentropy',
+#     metrics=['accuracy']
+# )
+
+# model.summary()
+
+# # ===============================
+# # 7️⃣ Model training
+# # ===============================
+# callbacks = [
+#     tf.keras.callbacks.EarlyStopping(
+#         monitor='val_loss',
+#         patience=15,
+#         restore_best_weights=True
+#     ),
+#     tf.keras.callbacks.ReduceLROnPlateau(
+#         monitor='val_loss',
+#         factor=0.5,
+#         patience=5,
+#         min_lr=1e-6
+#     )
+# ]
+
+# history = model.fit(
+#     X_train, y_train,
+#     epochs=100,
+#     batch_size=16,
+#     validation_data=(X_test, y_test),
+#     callbacks=callbacks
+# )
+
+# print("Model training completed!")
+
+# # ===============================
+# # 8️⃣ Save model
+# # ===============================
+# model.save("sound_class_model_mfcc_opt.h5")
+
+# # ===============================
+# # 9️⃣ Stable prediction (fixed segmentation)
+# # ===============================
+# def predict_audio_stable(file_path, top_k=5):
+
+#     y, sr = librosa.load(file_path, sr=22050)
+
+#     segment_len = sr * 2
+#     step = segment_len // 2   # fixed sliding window
+
+#     preds = []
+
+#     for start in range(0, len(y)-segment_len, step):
+
+#         y_seg = y[start:start+segment_len]
+
+#         features = extract_features_from_signal(y_seg)
+#         features = features[np.newaxis, ..., np.newaxis]
+
+#         pred = model.predict(features, verbose=0)[0]
+#         preds.append(pred)
+
+#     pred_avg = np.mean(preds, axis=0)
+
+#     top_indices = np.argsort(pred_avg)[-top_k:][::-1]
+
+#     print(f"\nTop-{top_k} prediction results for {file_path} (average probability):")
+
+#     # 更改部分
+#     # for i in top_indices:
+#     #     label = le.inverse_transform([i])[0]
+#     #     print(f"{label}: {pred_avg[i]:.3f}")
+#     from business.logic import decide_and_execute
+
+# # 打包 top-k 结果
+#     top_labels_conf = [(le.inverse_transform([i])[0], pred_avg[i]) for i in top_indices]
+
+# # 调用你的 business logic
+#     decide_and_execute(top_labels_conf)
+
+
+
+# # ===============================
+# # 🔟 Testing
+# # ===============================
+# test_files = [
+#     "../test_audio/dog.wav",
+#     "../test_audio/horn.wav",
+#     "../test_audio/siren.wav",
+#     "../test_audio/clock.wav",
+#     "../test_audio/footsteps.wav"
+# ]
+
+# # for f in test_files:
+# #     predict_audio_stable(f)
+
+#     # 🔟 Testing with business logic
+# for f in test_files:
+#     predict_audio_stable(f)
+
 import os
 import numpy as np
 import pandas as pd
@@ -645,7 +907,7 @@ import random
 print("All libraries imported successfully!")
 
 # ===============================
-# 0️⃣ Fix randomness (VERY IMPORTANT)
+# 0️⃣ Fix randomness
 # ===============================
 SEED = 42
 
@@ -676,26 +938,21 @@ def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, augment=False)
     y, sr = librosa.load(file_path, sr=sr)
 
     if augment:
-        # Random volume scaling + noise injection
         y = y * np.random.uniform(0.9, 1.1)
         y = y + 0.002 * np.random.randn(len(y))
 
-        # Time stretching
         rate = np.random.uniform(0.9, 1.1)
         y = librosa.effects.time_stretch(y, rate=rate)
 
-        # Pitch shifting
         n_steps = np.random.uniform(-2, 2)
         y = librosa.effects.pitch_shift(y=y, sr=sr, n_steps=n_steps)
 
-    # MFCC + Delta + Delta-Delta features
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
     delta = librosa.feature.delta(mfcc)
     delta2 = librosa.feature.delta(mfcc, order=2)
 
     features = np.concatenate([mfcc, delta, delta2], axis=0)
 
-    # Pad or truncate to fixed length
     if features.shape[1] < max_len:
         pad = max_len - features.shape[1]
         features = np.pad(features, ((0,0),(0,pad)))
@@ -706,50 +963,27 @@ def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, augment=False)
 
 
 # ===============================
-# 3️⃣ Feature extraction for prediction
-# ===============================
-def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
-
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
-    delta = librosa.feature.delta(mfcc)
-    delta2 = librosa.feature.delta(mfcc, order=2)
-
-    features = np.concatenate([mfcc, delta, delta2], axis=0)
-
-    # Pad or truncate
-    if features.shape[1] < max_len:
-        pad = max_len - features.shape[1]
-        features = np.pad(features, ((0,0),(0,pad)))
-    else:
-        features = features[:, :max_len]
-
-    return features
-
-
-# ===============================
-# 4️⃣ Build training dataset (original + augmented)
+# 3️⃣ Build dataset
 # ===============================
 X, y = [], []
 
-print("Starting audio feature extraction...")
+print("Starting feature extraction...")
 
 for _, row in meta.iterrows():
 
     file_path = os.path.join(DATA_PATH, "audio", row["filename"])
 
     try:
-        # Original sample
         X.append(extract_features(file_path, augment=False))
         y.append(row["category"])
 
-        # Augmented sample
         X.append(extract_features(file_path, augment=True))
         y.append(row["category"])
 
     except:
         continue
 
-print("Audio feature extraction completed!")
+print("Feature extraction done!")
 
 X = np.array(X)[..., np.newaxis]
 
@@ -758,7 +992,7 @@ y_encoded = le.fit_transform(y)
 y_onehot = tf.keras.utils.to_categorical(y_encoded)
 
 # ===============================
-# 5️⃣ Train/Test split
+# 4️⃣ Split dataset
 # ===============================
 X_train, X_test, y_train, y_test = train_test_split(
     X, y_onehot,
@@ -768,30 +1002,30 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ===============================
-# 6️⃣ CNN model architecture
+# 5️⃣ CNN model
 # ===============================
 model = models.Sequential([
 
     layers.Input(shape=X_train.shape[1:]),
 
-    layers.Conv2D(32,(3,3),activation='relu',padding='same'),
+    layers.Conv2D(32, (3,3), activation='relu', padding='same'),
     layers.BatchNormalization(),
     layers.MaxPooling2D(2),
 
-    layers.Conv2D(64,(3,3),activation='relu',padding='same'),
+    layers.Conv2D(64, (3,3), activation='relu', padding='same'),
     layers.BatchNormalization(),
     layers.MaxPooling2D(2),
 
-    layers.Conv2D(128,(3,3),activation='relu',padding='same'),
+    layers.Conv2D(128, (3,3), activation='relu', padding='same'),
     layers.BatchNormalization(),
 
     layers.GlobalAveragePooling2D(),
 
     layers.Dropout(0.4),
-    layers.Dense(128,activation='relu'),
+    layers.Dense(128, activation='relu'),
     layers.Dropout(0.4),
 
-    layers.Dense(y_onehot.shape[1],activation='softmax')
+    layers.Dense(y_onehot.shape[1], activation='softmax')
 ])
 
 model.compile(
@@ -803,7 +1037,7 @@ model.compile(
 model.summary()
 
 # ===============================
-# 7️⃣ Model training
+# 6️⃣ Training
 # ===============================
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
@@ -819,7 +1053,7 @@ callbacks = [
     )
 ]
 
-history = model.fit(
+model.fit(
     X_train, y_train,
     epochs=100,
     batch_size=16,
@@ -827,70 +1061,16 @@ history = model.fit(
     callbacks=callbacks
 )
 
-print("Model training completed!")
+print("Training completed!")
 
 # ===============================
-# 8️⃣ Save model
+# 7️⃣ ⭐ FIX: SAVE MODEL (IMPORTANT)
 # ===============================
-model.save("sound_class_model_mfcc_opt.h5")
 
-# ===============================
-# 9️⃣ Stable prediction (fixed segmentation)
-# ===============================
-def predict_audio_stable(file_path, top_k=5):
+# ❌ 不要再用 .h5
+# model.save("sound_class_model_mfcc_opt.h5")
 
-    y, sr = librosa.load(file_path, sr=22050)
+# ✅ 正确方式（Render兼容）
+model.save("sound_class_model_mfcc_opt.keras")
 
-    segment_len = sr * 2
-    step = segment_len // 2   # fixed sliding window
-
-    preds = []
-
-    for start in range(0, len(y)-segment_len, step):
-
-        y_seg = y[start:start+segment_len]
-
-        features = extract_features_from_signal(y_seg)
-        features = features[np.newaxis, ..., np.newaxis]
-
-        pred = model.predict(features, verbose=0)[0]
-        preds.append(pred)
-
-    pred_avg = np.mean(preds, axis=0)
-
-    top_indices = np.argsort(pred_avg)[-top_k:][::-1]
-
-    print(f"\nTop-{top_k} prediction results for {file_path} (average probability):")
-
-    # 更改部分
-    # for i in top_indices:
-    #     label = le.inverse_transform([i])[0]
-    #     print(f"{label}: {pred_avg[i]:.3f}")
-    from business.logic import decide_and_execute
-
-# 打包 top-k 结果
-    top_labels_conf = [(le.inverse_transform([i])[0], pred_avg[i]) for i in top_indices]
-
-# 调用你的 business logic
-    decide_and_execute(top_labels_conf)
-
-
-
-# ===============================
-# 🔟 Testing
-# ===============================
-test_files = [
-    "../test_audio/dog.wav",
-    "../test_audio/horn.wav",
-    "../test_audio/siren.wav",
-    "../test_audio/clock.wav",
-    "../test_audio/footsteps.wav"
-]
-
-# for f in test_files:
-#     predict_audio_stable(f)
-
-    # 🔟 Testing with business logic
-for f in test_files:
-    predict_audio_stable(f)
-
+print("Model saved in .keras format!")
