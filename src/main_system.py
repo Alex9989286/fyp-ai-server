@@ -233,7 +233,6 @@
 import numpy as np
 import librosa
 import tensorflow as tf
-from tensorflow.keras.models import load_model
 from sklearn.preprocessing import LabelEncoder
 import os
 
@@ -252,26 +251,24 @@ if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
 
 # ==========================
-# ⭐ Lazy Load Model (最终修复版)
+# ⭐ FIX 1: Lazy Load Model
 # ==========================
 model = None
 
 def get_model():
-    """
-    Load model only when first needed.
-    Fix Keras compatibility issue.
-    """
     global model
 
     if model is None:
-        print("🔄 Loading AI model (compat mode)...")
+        print("🔄 Loading AI model...")
 
         try:
-            # ⭐ 关键修复：compile=False
+            # ⭐ FIX 2: force low-level TF loader (IMPORTANT)
             model = tf.keras.models.load_model(
                 MODEL_PATH,
-                compile=False
+                compile=False,
+                custom_objects=None
             )
+
             print("✅ Model loaded successfully!")
 
         except Exception as e:
@@ -282,7 +279,7 @@ def get_model():
 
 
 # ==========================
-# Label Encoder (same as training)
+# Label Encoder
 # ==========================
 target_classes = [
     "car_horn",
@@ -318,18 +315,16 @@ def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
 
 
 # ==========================
-# Predict + Business Logic
+# Predict
 # ==========================
 def process_audio(file_path):
 
-    # ⭐ Lazy load model
     model = get_model()
 
-    # Load audio
     y, sr = librosa.load(file_path, sr=22050)
 
-    segment_len = sr * 2      # 2 seconds
-    step = segment_len // 2   # 50% overlap
+    segment_len = sr * 2
+    step = segment_len // 2
 
     preds = []
 
@@ -343,11 +338,9 @@ def process_audio(file_path):
         pred = model.predict(features, verbose=0)[0]
         preds.append(pred)
 
-    # ⭐ 防止空预测 crash
     if len(preds) == 0:
         raise ValueError("Audio too short (minimum 2 seconds required)")
 
-    # Average predictions
     pred_avg = np.mean(preds, axis=0)
 
     best_index = np.argmax(pred_avg)
@@ -356,14 +349,13 @@ def process_audio(file_path):
 
     print(f"🎧 Detected: {label} ({confidence:.2f})")
 
-    # Business logic
     decide_and_execute(label, confidence)
 
     return label, confidence
 
 
 # ==========================
-# Local testing
+# Local test
 # ==========================
 if __name__ == "__main__":
 
