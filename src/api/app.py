@@ -220,7 +220,111 @@
 #         port=port,
 #         reload=False
 #     )
+
+
+# from fastapi import FastAPI, UploadFile, File
+# import shutil
+# import os
+# import sys
+# import uuid
+# import uvicorn
+
+# # ==========================
+# # Path setup
+# # ==========================
+# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# sys.path.append(BASE_DIR)
+
+# from main_system import process_audio, get_model
+
+# # ==========================
+# # FastAPI App
+# # ==========================
+# app = FastAPI(
+#     title="AI Sound Detection API",
+#     version="1.0"
+# )
+
+# # ==========================
+# # Create temp folder (跨平台)
+# # ==========================
+# TEMP_DIR = os.path.join(os.getcwd(), "temp")
+# os.makedirs(TEMP_DIR, exist_ok=True)
+
+
+# # ==========================
+# # Preload model
+# # ==========================
+# @app.on_event("startup")
+# def startup():
+#     print("🚀 Preloading model...")
+#     get_model()
+#     print("✅ Model ready!")
+
+
+# # ==========================
+# # Health check
+# # ==========================
+# @app.get("/")
+# def home():
+#     return {"message": "AI Server Running 🚀"}
+
+
+# # ==========================
+# # Detect sound endpoint
+# # ==========================
+# @app.post("/detect_sound")
+# async def detect_sound(file: UploadFile = File(...)):
+
+#     # ✅ Cross-platform temp file path
+#     temp_path = os.path.join(
+#         TEMP_DIR,
+#         f"{uuid.uuid4().hex}_{file.filename}"
+#     )
+
+#     try:
+#         # Save file
+#         with open(temp_path, "wb") as buffer:
+#             shutil.copyfileobj(file.file, buffer)
+
+#         print(f"📁 File received: {file.filename}")
+
+#         # Run AI
+#         label, confidence = process_audio(temp_path)
+
+#         print(f"🎯 Result: {label} ({confidence})")
+
+#         return {
+#             "label": label,
+#             "confidence": float(confidence)
+#         }
+
+#     except Exception as e:
+#         print("🔥 ERROR:", str(e))
+#         return {
+#             "error": str(e)
+#         }
+
+#     finally:
+#         # cleanup
+#         if os.path.exists(temp_path):
+#             os.remove(temp_path)
+
+
+# # ==========================
+# # Local run
+# # ==========================
+# if __name__ == "__main__":
+#     uvicorn.run(
+#         "app:app",
+#         host="0.0.0.0",
+#         port=int(os.environ.get("PORT", 8000)),
+#         reload=True
+#     )
+ 
+
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
 import sys
@@ -244,14 +348,24 @@ app = FastAPI(
 )
 
 # ==========================
-# Create temp folder (跨平台)
+# CORS FIX (VERY IMPORTANT)
+# ==========================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # FYP demo OK
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ==========================
+# Temp folder (safe cross-platform)
 # ==========================
 TEMP_DIR = os.path.join(os.getcwd(), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-
 # ==========================
-# Preload model
+# Preload model (avoid cold start delay)
 # ==========================
 @app.on_event("startup")
 def startup():
@@ -259,14 +373,14 @@ def startup():
     get_model()
     print("✅ Model ready!")
 
-
 # ==========================
 # Health check
 # ==========================
 @app.get("/")
 def home():
-    return {"message": "AI Server Running 🚀"}
-
+    return {
+        "message": "AI Server Running 🚀"
+    }
 
 # ==========================
 # Detect sound endpoint
@@ -274,20 +388,17 @@ def home():
 @app.post("/detect_sound")
 async def detect_sound(file: UploadFile = File(...)):
 
-    # ✅ Cross-platform temp file path
-    temp_path = os.path.join(
-        TEMP_DIR,
-        f"{uuid.uuid4().hex}_{file.filename}"
-    )
+    temp_filename = f"{uuid.uuid4().hex}_{file.filename}"
+    temp_path = os.path.join(TEMP_DIR, temp_filename)
 
     try:
-        # Save file
+        # Save uploaded file
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         print(f"📁 File received: {file.filename}")
 
-        # Run AI
+        # AI inference
         label, confidence = process_audio(temp_path)
 
         print(f"🎯 Result: {label} ({confidence})")
@@ -304,13 +415,15 @@ async def detect_sound(file: UploadFile = File(...)):
         }
 
     finally:
-        # cleanup
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
+        # safe cleanup
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except:
+            pass
 
 # ==========================
-# Local run
+# Local run (ONLY for testing)
 # ==========================
 if __name__ == "__main__":
     uvicorn.run(
