@@ -229,6 +229,145 @@
 
 #     for f in test_files:
 #         print(f"\nProcessing {os.path.basename(f)}...")
+# #         process_audio(f)
+# import numpy as np
+# import librosa
+# import tensorflow as tf
+# from sklearn.preprocessing import LabelEncoder
+# import os
+
+# # ==========================
+# # Business Logic Import
+# # ==========================
+# from business.logic import decide_and_execute
+
+# # ==========================
+# # Paths
+# # ==========================
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# MODEL_PATH = os.path.join(BASE_DIR, "models", "sound_class_model_mfcc_opt.h5")
+
+
+# if not os.path.exists(MODEL_PATH):
+#     raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+
+# # ==========================
+# # ⭐ FIX 1: Lazy Load Model
+# # ==========================
+# model = None
+
+# def get_model():
+#     global model
+
+#     if model is None:
+#         print("🔄 Loading AI model...")
+
+#         try:
+#             # ⭐ FIX 2: force low-level TF loader (IMPORTANT)
+#             model = tf.keras.models.load_model(
+#                 MODEL_PATH,
+#                 compile=False,
+#                 custom_objects=None
+#             )
+
+#             print("✅ Model loaded successfully!")
+
+#         except Exception as e:
+#             print("🔥 Model load failed:", str(e))
+#             raise e
+
+#     return model
+
+
+# # ==========================
+# # Label Encoder
+# # ==========================
+# target_classes = [
+#     "car_horn",
+#     "dog",
+#     "door_wood_knock",
+#     "clock_alarm",
+#     "footsteps",
+#     "siren"
+# ]
+
+# le = LabelEncoder()
+# le.fit(target_classes)
+
+
+# # ==========================
+# # Feature extraction
+# # ==========================
+# def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
+
+#     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+#     delta = librosa.feature.delta(mfcc)
+#     delta2 = librosa.feature.delta(mfcc, order=2)
+
+#     features = np.concatenate([mfcc, delta, delta2], axis=0)
+
+#     if features.shape[1] < max_len:
+#         pad = max_len - features.shape[1]
+#         features = np.pad(features, ((0, 0), (0, pad)))
+#     else:
+#         features = features[:, :max_len]
+
+#     return features
+
+
+# # ==========================
+# # Predict
+# # ==========================
+# def process_audio(file_path):
+
+#     model = get_model()
+
+#     y, sr = librosa.load(file_path, sr=22050)
+
+#     segment_len = sr * 2
+#     step = segment_len // 2
+
+#     preds = []
+
+#     for start in range(0, len(y) - segment_len, step):
+
+#         y_seg = y[start:start + segment_len]
+
+#         features = extract_features_from_signal(y_seg)
+#         features = features[np.newaxis, ..., np.newaxis]
+
+#         pred = model.predict(features, verbose=0)[0]
+#         preds.append(pred)
+
+#     if len(preds) == 0:
+#         raise ValueError("Audio too short (minimum 2 seconds required)")
+
+#     pred_avg = np.mean(preds, axis=0)
+
+#     best_index = np.argmax(pred_avg)
+#     label = le.inverse_transform([best_index])[0]
+#     confidence = float(pred_avg[best_index])
+
+#     print(f"🎧 Detected: {label} ({confidence:.2f})")
+
+#     decide_and_execute(label, confidence)
+
+#     return label, confidence
+
+
+# # ==========================
+# # Local test
+# # ==========================
+# if __name__ == "__main__":
+
+#     test_files = [
+#         os.path.join(BASE_DIR, "../test_audio/dog.wav"),
+#         os.path.join(BASE_DIR, "../test_audio/horn.wav"),
+#         os.path.join(BASE_DIR, "../test_audio/siren.wav"),
+#     ]
+
+#     for f in test_files:
+#         print(f"\nProcessing {os.path.basename(f)}...")
 #         process_audio(f)
 import numpy as np
 import librosa
@@ -237,22 +376,17 @@ from sklearn.preprocessing import LabelEncoder
 import os
 
 # ==========================
-# Business Logic Import
-# ==========================
-from business.logic import decide_and_execute
-
-# ==========================
 # Paths
 # ==========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 MODEL_PATH = os.path.join(BASE_DIR, "models", "sound_class_model_mfcc_opt.h5")
 
-
 if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+    raise FileNotFoundError(f"❌ Model file not found: {MODEL_PATH}")
 
 # ==========================
-# ⭐ FIX 1: Lazy Load Model
+# Lazy Load Model
 # ==========================
 model = None
 
@@ -261,20 +395,8 @@ def get_model():
 
     if model is None:
         print("🔄 Loading AI model...")
-
-        try:
-            # ⭐ FIX 2: force low-level TF loader (IMPORTANT)
-            model = tf.keras.models.load_model(
-                MODEL_PATH,
-                compile=False,
-                custom_objects=None
-            )
-
-            print("✅ Model loaded successfully!")
-
-        except Exception as e:
-            print("🔥 Model load failed:", str(e))
-            raise e
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        print("✅ Model loaded!")
 
     return model
 
@@ -306,6 +428,7 @@ def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
 
     features = np.concatenate([mfcc, delta, delta2], axis=0)
 
+    # Padding / Trimming
     if features.shape[1] < max_len:
         pad = max_len - features.shape[1]
         features = np.pad(features, ((0, 0), (0, pad)))
@@ -316,12 +439,13 @@ def extract_features_from_signal(y, sr=22050, n_mfcc=40, max_len=128):
 
 
 # ==========================
-# Predict
+# Prediction
 # ==========================
 def process_audio(file_path):
 
     model = get_model()
 
+    print(f"📂 Loading audio: {file_path}")
     y, sr = librosa.load(file_path, sr=22050)
 
     segment_len = sr * 2
@@ -329,7 +453,8 @@ def process_audio(file_path):
 
     preds = []
 
-    for start in range(0, len(y) - segment_len, step):
+    # ✅ FIXED loop
+    for start in range(0, len(y) - segment_len + 1, step):
 
         y_seg = y[start:start + segment_len]
 
@@ -340,7 +465,7 @@ def process_audio(file_path):
         preds.append(pred)
 
     if len(preds) == 0:
-        raise ValueError("Audio too short (minimum 2 seconds required)")
+        raise ValueError("❌ Audio too short (minimum 2 seconds required)")
 
     pred_avg = np.mean(preds, axis=0)
 
@@ -350,8 +475,6 @@ def process_audio(file_path):
 
     print(f"🎧 Detected: {label} ({confidence:.2f})")
 
-    decide_and_execute(label, confidence)
-
     return label, confidence
 
 
@@ -360,6 +483,9 @@ def process_audio(file_path):
 # ==========================
 if __name__ == "__main__":
 
+    print("🚀 Running main_system test...")
+
+    # 👉 你的 test_audio 文件夹路径
     test_files = [
         os.path.join(BASE_DIR, "../test_audio/dog.wav"),
         os.path.join(BASE_DIR, "../test_audio/horn.wav"),
@@ -367,5 +493,16 @@ if __name__ == "__main__":
     ]
 
     for f in test_files:
-        print(f"\nProcessing {os.path.basename(f)}...")
-        process_audio(f)
+
+        if not os.path.exists(f):
+            print(f"❌ File not found: {f}")
+            continue
+
+        print(f"\n📊 Processing: {os.path.basename(f)}")
+
+        try:
+            label, confidence = process_audio(f)
+            print(f"✅ Result: {label} ({confidence:.2f})")
+
+        except Exception as e:
+            print(f"🔥 Error processing {f}: {str(e)}")

@@ -894,6 +894,187 @@
 # for f in test_files:
 #     predict_audio_stable(f)
 
+# import os
+# import numpy as np
+# import pandas as pd
+# import librosa
+# import tensorflow as tf
+# from tensorflow.keras import layers, models
+# from sklearn.model_selection import train_test_split
+# from sklearn.preprocessing import LabelEncoder
+# import random
+
+# print("All libraries imported successfully!")
+
+# # ===============================
+# # 0️⃣ Fix randomness
+# # ===============================
+# SEED = 42
+
+# os.environ["PYTHONHASHSEED"] = str(SEED)
+# random.seed(SEED)
+# np.random.seed(SEED)
+# tf.random.set_seed(SEED)
+
+# # ===============================
+# # 1️⃣ Dataset path
+# # ===============================
+# DATA_PATH = "../data/ESC-50"
+
+# meta = pd.read_csv(os.path.join(DATA_PATH, "meta/esc50.csv"))
+
+# target_classes = [
+#     "car_horn", "dog", "door_wood_knock",
+#     "clock_alarm", "footsteps", "siren"
+# ]
+
+# meta = meta[meta["category"].isin(target_classes)]
+
+# # ===============================
+# # 2️⃣ Feature extraction
+# # ===============================
+# def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, augment=False):
+
+#     y, sr = librosa.load(file_path, sr=sr)
+
+#     if augment:
+#         y = y * np.random.uniform(0.9, 1.1)
+#         y = y + 0.002 * np.random.randn(len(y))
+
+#         rate = np.random.uniform(0.9, 1.1)
+#         y = librosa.effects.time_stretch(y, rate=rate)
+
+#         n_steps = np.random.uniform(-2, 2)
+#         y = librosa.effects.pitch_shift(y=y, sr=sr, n_steps=n_steps)
+
+#     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+#     delta = librosa.feature.delta(mfcc)
+#     delta2 = librosa.feature.delta(mfcc, order=2)
+
+#     features = np.concatenate([mfcc, delta, delta2], axis=0)
+
+#     if features.shape[1] < max_len:
+#         pad = max_len - features.shape[1]
+#         features = np.pad(features, ((0,0),(0,pad)))
+#     else:
+#         features = features[:, :max_len]
+
+#     return features
+
+
+# # ===============================
+# # 3️⃣ Build dataset
+# # ===============================
+# X, y = [], []
+
+# print("Starting feature extraction...")
+
+# for _, row in meta.iterrows():
+
+#     file_path = os.path.join(DATA_PATH, "audio", row["filename"])
+
+#     try:
+#         X.append(extract_features(file_path, augment=False))
+#         y.append(row["category"])
+
+#         X.append(extract_features(file_path, augment=True))
+#         y.append(row["category"])
+
+#     except:
+#         continue
+
+# print("Feature extraction done!")
+
+# X = np.array(X)[..., np.newaxis]
+
+# le = LabelEncoder()
+# y_encoded = le.fit_transform(y)
+# y_onehot = tf.keras.utils.to_categorical(y_encoded)
+
+# # ===============================
+# # 4️⃣ Split dataset
+# # ===============================
+# X_train, X_test, y_train, y_test = train_test_split(
+#     X, y_onehot,
+#     test_size=0.2,
+#     random_state=SEED,
+#     stratify=y_encoded
+# )
+
+# # ===============================
+# # 5️⃣ CNN model
+# # ===============================
+# model = models.Sequential([
+
+#     layers.Input(shape=X_train.shape[1:]),
+
+#     layers.Conv2D(32, (3,3), activation='relu', padding='same'),
+#     layers.BatchNormalization(),
+#     layers.MaxPooling2D(2),
+
+#     layers.Conv2D(64, (3,3), activation='relu', padding='same'),
+#     layers.BatchNormalization(),
+#     layers.MaxPooling2D(2),
+
+#     layers.Conv2D(128, (3,3), activation='relu', padding='same'),
+#     layers.BatchNormalization(),
+
+#     layers.GlobalAveragePooling2D(),
+
+#     layers.Dropout(0.4),
+#     layers.Dense(128, activation='relu'),
+#     layers.Dropout(0.4),
+
+#     layers.Dense(y_onehot.shape[1], activation='softmax')
+# ])
+
+# model.compile(
+#     optimizer='adam',
+#     loss='categorical_crossentropy',
+#     metrics=['accuracy']
+# )
+
+# model.summary()
+
+# # ===============================
+# # 6️⃣ Training
+# # ===============================
+# callbacks = [
+#     tf.keras.callbacks.EarlyStopping(
+#         monitor='val_loss',
+#         patience=15,
+#         restore_best_weights=True
+#     ),
+#     tf.keras.callbacks.ReduceLROnPlateau(
+#         monitor='val_loss',
+#         factor=0.5,
+#         patience=5,
+#         min_lr=1e-6
+#     )
+# ]
+
+# model.fit(
+#     X_train, y_train,
+#     epochs=100,
+#     batch_size=16,
+#     validation_data=(X_test, y_test),
+#     callbacks=callbacks
+# )
+
+# print("Training completed!")
+
+# # ===============================
+# # 7️⃣ ⭐ FIX: SAVE MODEL (IMPORTANT)
+# # ===============================
+
+# # ❌ 不要再用 .h5
+# # model.save("sound_class_model_mfcc_opt.h5")
+
+
+# # ✅ 正确方式（Render兼容）
+# model.save("sound_class_model_mfcc_opt.keras")
+
+# print("Model saved in .keras format!")
 import os
 import numpy as np
 import pandas as pd
@@ -923,12 +1104,27 @@ DATA_PATH = "../data/ESC-50"
 
 meta = pd.read_csv(os.path.join(DATA_PATH, "meta/esc50.csv"))
 
+# ===============================
+# 🔥 FIXED: correct ESC-50 labels
+# ===============================
 target_classes = [
-    "car_horn", "dog", "door_wood_knock",
-    "clock_alarm", "footsteps", "siren"
+    "car_horn",
+    "dog",
+    "door_knock",
+    "clock_tick",
+    "footsteps",
+    "siren"
 ]
 
-meta = meta[meta["category"].isin(target_classes)]
+# filter dataset
+meta = meta[meta["category"].isin(target_classes)].reset_index(drop=True)
+
+print("Filtered dataset size:", len(meta))
+print("Class distribution:\n", meta["category"].value_counts())
+
+# 🚨 safety check
+if len(meta) == 0:
+    raise ValueError("❌ Dataset is empty after filtering. Check target_classes!")
 
 # ===============================
 # 2️⃣ Feature extraction
@@ -953,9 +1149,10 @@ def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, augment=False)
 
     features = np.concatenate([mfcc, delta, delta2], axis=0)
 
+    # padding / truncation
     if features.shape[1] < max_len:
         pad = max_len - features.shape[1]
-        features = np.pad(features, ((0,0),(0,pad)))
+        features = np.pad(features, ((0, 0), (0, pad)))
     else:
         features = features[:, :max_len]
 
@@ -973,22 +1170,39 @@ for _, row in meta.iterrows():
 
     file_path = os.path.join(DATA_PATH, "audio", row["filename"])
 
+    if not os.path.exists(file_path):
+        continue
+
     try:
+        # original
         X.append(extract_features(file_path, augment=False))
         y.append(row["category"])
 
+        # augmented
         X.append(extract_features(file_path, augment=True))
         y.append(row["category"])
 
-    except:
+    except Exception as e:
+        print("Skip file:", file_path, "Reason:", e)
         continue
 
 print("Feature extraction done!")
 
+# 🚨 safety check
+if len(y) == 0:
+    raise ValueError("❌ No training data generated!")
+
 X = np.array(X)[..., np.newaxis]
 
+# ===============================
+# Label encoding
+# ===============================
 le = LabelEncoder()
 y_encoded = le.fit_transform(y)
+
+print("Labels:", list(le.classes_))
+print("Total samples:", len(y_encoded))
+
 y_onehot = tf.keras.utils.to_categorical(y_encoded)
 
 # ===============================
@@ -1008,15 +1222,15 @@ model = models.Sequential([
 
     layers.Input(shape=X_train.shape[1:]),
 
-    layers.Conv2D(32, (3,3), activation='relu', padding='same'),
+    layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
     layers.BatchNormalization(),
     layers.MaxPooling2D(2),
 
-    layers.Conv2D(64, (3,3), activation='relu', padding='same'),
+    layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
     layers.BatchNormalization(),
     layers.MaxPooling2D(2),
 
-    layers.Conv2D(128, (3,3), activation='relu', padding='same'),
+    layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
     layers.BatchNormalization(),
 
     layers.GlobalAveragePooling2D(),
@@ -1025,7 +1239,7 @@ model = models.Sequential([
     layers.Dense(128, activation='relu'),
     layers.Dropout(0.4),
 
-    layers.Dense(y_onehot.shape[1], activation='softmax')
+    layers.Dense(len(le.classes_), activation='softmax')
 ])
 
 model.compile(
@@ -1064,14 +1278,8 @@ model.fit(
 print("Training completed!")
 
 # ===============================
-# 7️⃣ ⭐ FIX: SAVE MODEL (IMPORTANT)
+# 7️⃣ Save model (Render compatible)
 # ===============================
-
-# ❌ 不要再用 .h5
-# model.save("sound_class_model_mfcc_opt.h5")
-
-
-# ✅ 正确方式（Render兼容）
 model.save("sound_class_model_mfcc_opt.keras")
 
 print("Model saved in .keras format!")

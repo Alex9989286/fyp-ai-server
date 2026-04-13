@@ -119,70 +119,175 @@
 #         port=port,
 #         reload=False
 #     )
+
+
+
+
+# from fastapi import FastAPI, UploadFile, File
+# import shutil
+# import os
+# import sys
+# import uvicorn
+# import uuid
+
+# # =====================================================
+# # 让 Python 能找到 src/main_system.py
+# # =====================================================
+# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# sys.path.append(BASE_DIR)
+
+# # =====================================================
+# # 导入 AI 系统
+# # =====================================================
+# from main_system import process_audio, get_model   # ⭐ 加 get_model
+
+# # =====================================================
+# # FastAPI App
+# # =====================================================
+# app = FastAPI(
+#     title="AI Sound Detection API",
+#     description="Sound classification backend",
+#     version="1.0"
+# )
+
+# # -----------------------------------------------------
+# # ⭐ 启动时预加载模型（避免第一次请求卡死）
+# # -----------------------------------------------------
+# @app.on_event("startup")
+# def load_model_once():
+#     print("🚀 Preloading model...")
+#     try:
+#         get_model()
+#         print("✅ Model preloaded!")
+#     except Exception as e:
+#         print("🔥 Model load error:", str(e))
+
+
+# # -----------------------------------------------------
+# # Health Check
+# # -----------------------------------------------------
+# @app.get("/")
+# def home():
+#     return {"message": "AI Server Running ✅"}
+
+
+# # -----------------------------------------------------
+# # Sound Detection Endpoint
+# # -----------------------------------------------------
+# @app.post("/detect_sound")
+# async def detect_sound(file: UploadFile = File(...)):
+
+#     temp_path = f"temp_{uuid.uuid4().hex}_{file.filename}"
+
+#     try:
+#         # 保存文件
+#         with open(temp_path, "wb") as buffer:
+#             shutil.copyfileobj(file.file, buffer)
+
+#         print(f"📁 File received: {file.filename}")
+
+#         # AI 推理
+#         label, confidence = process_audio(temp_path)
+
+#         print(f"🎯 Result: {label} ({confidence})")
+
+#         return {
+#             "label": label,
+#             "confidence": float(confidence)
+#         }
+
+#     except Exception as e:
+#         # ⭐ 关键：显示真实错误
+#         print("🔥 ERROR:", str(e))
+#         return {
+#             "error": str(e)
+#         }
+
+#     finally:
+#         if os.path.exists(temp_path):
+#             os.remove(temp_path)
+
+
+# # =====================================================
+# # Render 启动入口
+# # =====================================================
+# if __name__ == "__main__":
+#     port = int(os.environ.get("PORT", 10000))
+
+#     uvicorn.run(
+#         "src.api.app:app",
+#         host="0.0.0.0",
+#         port=port,
+#         reload=False
+#     )
 from fastapi import FastAPI, UploadFile, File
 import shutil
 import os
 import sys
-import uvicorn
 import uuid
+import uvicorn
 
-# =====================================================
-# 让 Python 能找到 src/main_system.py
-# =====================================================
+# ==========================
+# Path setup
+# ==========================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
-# =====================================================
-# 导入 AI 系统
-# =====================================================
-from main_system import process_audio, get_model   # ⭐ 加 get_model
+from main_system import process_audio, get_model
 
-# =====================================================
+# ==========================
 # FastAPI App
-# =====================================================
+# ==========================
 app = FastAPI(
     title="AI Sound Detection API",
-    description="Sound classification backend",
     version="1.0"
 )
 
-# -----------------------------------------------------
-# ⭐ 启动时预加载模型（避免第一次请求卡死）
-# -----------------------------------------------------
+# ==========================
+# Create temp folder (跨平台)
+# ==========================
+TEMP_DIR = os.path.join(os.getcwd(), "temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+
+# ==========================
+# Preload model
+# ==========================
 @app.on_event("startup")
-def load_model_once():
+def startup():
     print("🚀 Preloading model...")
-    try:
-        get_model()
-        print("✅ Model preloaded!")
-    except Exception as e:
-        print("🔥 Model load error:", str(e))
+    get_model()
+    print("✅ Model ready!")
 
 
-# -----------------------------------------------------
-# Health Check
-# -----------------------------------------------------
+# ==========================
+# Health check
+# ==========================
 @app.get("/")
 def home():
-    return {"message": "AI Server Running ✅"}
+    return {"message": "AI Server Running 🚀"}
 
 
-# -----------------------------------------------------
-# Sound Detection Endpoint
-# -----------------------------------------------------
+# ==========================
+# Detect sound endpoint
+# ==========================
 @app.post("/detect_sound")
 async def detect_sound(file: UploadFile = File(...)):
 
-    temp_path = f"temp_{uuid.uuid4().hex}_{file.filename}"
+    # ✅ Cross-platform temp file path
+    temp_path = os.path.join(
+        TEMP_DIR,
+        f"{uuid.uuid4().hex}_{file.filename}"
+    )
 
     try:
-        # 保存文件
+        # Save file
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         print(f"📁 File received: {file.filename}")
 
-        # AI 推理
+        # Run AI
         label, confidence = process_audio(temp_path)
 
         print(f"🎯 Result: {label} ({confidence})")
@@ -193,26 +298,24 @@ async def detect_sound(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        # ⭐ 关键：显示真实错误
         print("🔥 ERROR:", str(e))
         return {
             "error": str(e)
         }
 
     finally:
+        # cleanup
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
 
-# =====================================================
-# Render 启动入口
-# =====================================================
+# ==========================
+# Local run
+# ==========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-
     uvicorn.run(
-        "src.api.app:app",
+        "app:app",
         host="0.0.0.0",
-        port=port,
-        reload=False
+        port=int(os.environ.get("PORT", 8000)),
+        reload=True
     )
